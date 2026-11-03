@@ -1,0 +1,2032 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  Phone, AlertTriangle, Shield, Search, MapPin, Navigation, Clock,
+  ExternalLink, CheckCircle2, XCircle, HeartPulse, Stethoscope,
+  Info, ChevronRight, Menu, X, ArrowRight, UserCheck, Flame, Wind,
+  Activity, AlertCircle, RefreshCw, Send, MessageSquare
+} from 'lucide-react';
+
+/* =========================================================================
+   TYPE DEFINITIONS & SAFETY CONSTANTS
+   ========================================================================= */
+
+export type PageView = 'home' | 'guides' | 'hospitals' | 'emergency' | 'assistant' | 'about' | 'contact';
+
+export interface HealthGuide {
+  id: string;
+  categoryNumber: number;
+  title: string;
+  shortSummary: string;
+  iconName: string;
+  isEmergencyAlert: boolean;
+  content: {
+    whatIsIt: string;
+    commonSymptoms: string[];
+    safeImmediateActions: string[];
+    whatToAvoid: string[];
+    warningSigns: string[];
+    whenToConsultDoctor: string[];
+    whenToSeekEmergency: string[];
+    references: { name: string; url: string }[];
+  };
+}
+
+export interface Facility {
+  id: string;
+  name: string;
+  type: 'hospital' | 'emergency' | 'clinic' | 'pharmacy';
+  address: string;
+  lat: number;
+  lon: number;
+  distanceKm?: number;
+  phone?: string;
+  isOpen24x7?: boolean;
+}
+
+const EMERGENCY_NUMBER = '112'; // National Unified Emergency Helpline for India
+
+/* =========================================================================
+   THE 8 MAJOR CLINICAL HEALTH GUIDES (VERIFIED SAFETY PROTOCOLS)
+   ========================================================================= */
+
+const HEALTH_CATEGORIES: HealthGuide[] = [
+  {
+    id: 'fever-infections',
+    categoryNumber: 1,
+    title: 'Fever & Common Infections',
+    shortSummary: 'Guidance for acute fever, viral cold, seasonal cough, and sore throat.',
+    iconName: 'Activity',
+    isEmergencyAlert: false,
+    content: {
+      whatIsIt: 'Fever is a temporary elevation of body temperature (>37.5°C or 99.5°F), usually an active defense against viral or bacterial infections such as influenza, dengue, or upper respiratory tract infections.',
+      commonSymptoms: [
+        'Body temperature above 37.5°C (99.5°F)',
+        'Body aches, chills, shivering, and mild headache',
+        'Runny or congested nose, sneezing, and scratchy sore throat',
+        'Mild fatigue and decreased appetite'
+      ],
+      safeImmediateActions: [
+        'Rest adequately in a well-ventilated, comfortable room.',
+        'Hydrate continuously with clean drinking water, coconut water, or Oral Rehydration Salts (ORS).',
+        'Use tepid tap-water sponging on forehead and limbs if body temperature feels high (never use ice water).',
+        'Monitor temperature every 4 to 6 hours with a clean digital thermometer.'
+      ],
+      whatToAvoid: [
+        'Do NOT take over-the-counter antibiotics without a physician prescription.',
+        'Do NOT bundle an actively shivering febrile patient in heavy synthetic blankets.',
+        'Never administer aspirin to children or teenagers due to the risk of Reye syndrome.'
+      ],
+      warningSigns: [
+        'High fever persisting beyond 3 consecutive days without improvement',
+        'Petechiae or unexplained reddish-purple skin rashes (suspected dengue or meningococcemia)',
+        'Inability to tolerate any liquids or signs of acute dehydration'
+      ],
+      whenToConsultDoctor: [
+        'Fever exceeding 38.5°C (101.3°F) for more than 48 hours.',
+        'Persistent cough with yellowish or greenish phlegm lasting over a week.',
+        'Severe earache or painful swallowing restricting fluids.'
+      ],
+      whenToSeekEmergency: [
+        'Stiff neck accompanied by confusion or extreme sensitivity to light.',
+        'Sudden breathing difficulty, wheezing, or bluish lips.',
+        'Seizure or sudden loss of responsiveness.'
+      ],
+      references: [
+        { name: 'National Health Portal of India (NHP)', url: 'https://www.nhp.gov.in' },
+        { name: 'World Health Organization (WHO) Fever Guidelines', url: 'https://www.who.int' }
+      ]
+    }
+  },
+  {
+    id: 'breathing-allergies',
+    categoryNumber: 2,
+    title: 'Breathing Problems & Allergies',
+    shortSummary: 'Asthma exacerbations, acute wheezing, dyspnea, and anaphylaxis indicators.',
+    iconName: 'Wind',
+    isEmergencyAlert: true,
+    content: {
+      whatIsIt: 'Respiratory distress involves difficulty getting adequate air into the lungs. This ranges from mild asthma attacks and allergic rhinitis to life-threatening acute airway obstruction and anaphylactic shock.',
+      commonSymptoms: [
+        'Shortness of breath, rapid shallow breathing, or audible wheezing',
+        'Persistent dry or spasmodic coughing during exertion or nighttime',
+        'Allergic skin hives (urticaria), facial or eyelid swelling, intense itching'
+      ],
+      safeImmediateActions: [
+        'Seat the person upright immediately; do not let them lie flat on their back.',
+        'Loosen restrictive collars, neckwear, or belts to allow free chest expansion.',
+        'If the person has a prescribed quick-relief rescue inhaler (e.g., Salbutamol) and spacer, assist them in taking it as directed by their doctor.',
+        'Maintain a calm, uncrowded environment with fresh air circulation.'
+      ],
+      whatToAvoid: [
+        'Do NOT force food, oral pills, or liquids into someone struggling to breathe.',
+        'Do NOT expose the patient to dust, incense smoke, mosquito coils, or perfumes.',
+        'Never leave a patient with progressive breathlessness unattended.'
+      ],
+      warningSigns: [
+        'Cyanosis (bluish tint on lips, fingernails, or tongue indicating low oxygen)',
+        'Inability to speak full sentences without pausing to gasp for air',
+        'Intercostal retractions (chest and ribs visibly sucking inwards when breathing)'
+      ],
+      whenToConsultDoctor: [
+        'New onset wheezing or seasonal breathlessness during physical activity.',
+        'Asthma symptoms requiring rescue inhaler use more than twice in one week.',
+        'Localized skin hives with mild allergic itching.'
+      ],
+      whenToSeekEmergency: [
+        'Swelling of the tongue, throat, or mouth with difficulty swallowing (Anaphylaxis - Call 112).',
+        'Severe sudden breathlessness with chest tightness or gasping.',
+        'Drowsiness, confusion, or exhaustion from the physical effort of breathing.'
+      ],
+      references: [
+        { name: 'Global Initiative for Asthma (GINA)', url: 'https://ginasthma.org' },
+        { name: 'Ministry of Health and Family Welfare, Govt of India', url: 'https://mohfw.gov.in' }
+      ]
+    }
+  },
+  {
+    id: 'chest-pain-heart',
+    categoryNumber: 3,
+    title: 'Chest Pain & Heart Attack Warning',
+    shortSummary: 'Critical recognition of acute coronary syndromes, angina, and heart attacks.',
+    iconName: 'HeartPulse',
+    isEmergencyAlert: true,
+    content: {
+      whatIsIt: 'Chest pain can arise from benign muscle strains or acid reflux, but it must ALWAYS be evaluated as a potential medical emergency (Myocardial Infarction / Heart Attack) when sudden or radiating.',
+      commonSymptoms: [
+        'Pressure, fullness, squeezing, burning, or aching in the center of the chest',
+        'Pain or discomfort radiating to the left shoulder, jaw, neck, back, or stomach',
+        'Cold sweat, unexplained nausea, lightheadedness, or sudden breathlessness'
+      ],
+      safeImmediateActions: [
+        'CALL 112 IMMEDIATELY. Every single minute counts during a coronary blockage.',
+        'Have the person sit quietly on the floor or a sturdy chair, supported with cushions.',
+        'Loosen tight clothing around the neck, chest, and waist.',
+        'If the person is completely unconscious and not breathing, initiate bystander hands-only CPR at 100-120 beats per minute until emergency responders arrive.'
+      ],
+      whatToAvoid: [
+        'Do NOT wait to see if the pain passes or assume it is simple gastric indigestion.',
+        'Do NOT allow the individual to drive themselves to the hospital.',
+        'Do NOT offer heavy meals, home concoctions, or antacids in place of emergency care.'
+      ],
+      warningSigns: [
+        'Crushing retrosternal chest pain lasting longer than 5 minutes',
+        'Profuse cold sweating paired with sudden pale or ashen skin',
+        'Sudden collapse, syncope, or unresponsiveness'
+      ],
+      whenToConsultDoctor: [
+        'Occasional brief, sharp chest twinges specifically triggered by turning or pressing ribs.',
+        'Mild acid reflux symptoms that only occur right after heavy spicy meals.'
+      ],
+      whenToSeekEmergency: [
+        'ANY unverified new-onset central chest tightness or burning radiating to limbs/jaw.',
+        'Chest discomfort paired with shortness of breath, dizziness, or vomiting.'
+      ],
+      references: [
+        { name: 'Indian Heart Association', url: 'https://indianheartassociation.org' },
+        { name: 'American Heart Association (AHA) Warning Signs', url: 'https://www.heart.org' }
+      ]
+    }
+  },
+  {
+    id: 'stroke-fast',
+    categoryNumber: 4,
+    title: 'Stroke Symptoms & FAST Guide',
+    shortSummary: 'Rapid assessment for acute ischemic or hemorrhagic stroke using the FAST protocol.',
+    iconName: 'AlertCircle',
+    isEmergencyAlert: true,
+    content: {
+      whatIsIt: 'A stroke occurs when blood flow to a part of the brain is cut off by a clot or ruptured blood vessel. Brain cells die within minutes. Rapid emergency hospital admission enables clot-busting interventions.',
+      commonSymptoms: [
+        'F — Face Drooping: One side of the face droops or is numb. Uneven smile.',
+        'A — Arm Weakness: One arm feels weak or numb; drifts downward when raised.',
+        'S — Speech Difficulty: Slurred words, unable to speak, or difficulty comprehending.',
+        'T — Time to Call 112: Immediate emergency medical transfer is required.'
+      ],
+      safeImmediateActions: [
+        'Dial 112 immediately and inform the dispatcher: "Suspected acute stroke".',
+        'Note the EXACT time the first symptom appeared (vital for thrombolytic medication windows).',
+        'Keep the person lying flat or with their head elevated at 15-30 degrees if conscious.',
+        'If vomiting occurs, gently roll them onto their side (recovery position) to prevent choking.'
+      ],
+      whatToAvoid: [
+        'Do NOT give the person water, food, aspirin, or any blood-pressure medications.',
+        'Do NOT allow the person to go to sleep or wait to see if symptoms resolve.',
+        'Do NOT attempt to transport via two-wheeler.'
+      ],
+      warningSigns: [
+        'Sudden numbness or paralysis of one side of the face or body',
+        'Sudden loss of balance, vertigo, or inability to walk straight',
+        'Sudden loss of vision in one or both eyes, or explosive thunderclap headache'
+      ],
+      whenToConsultDoctor: [
+        'Any historical mini-stroke or transient ischemic attack (TIA), even if full recovery took minutes. TIA requires urgent clinical investigation.'
+      ],
+      whenToSeekEmergency: [
+        'ANY positive finding on the FAST test. Call 112 immediately without delay.'
+      ],
+      references: [
+        { name: 'World Stroke Organization (WSO)', url: 'https://www.world-stroke.org' },
+        { name: 'Indian Stroke Association', url: 'https://strokeindia.com' }
+      ]
+    }
+  },
+  {
+    id: 'seizures-unconsciousness',
+    categoryNumber: 5,
+    title: 'Seizures & Unresponsiveness',
+    shortSummary: 'First aid for epileptic fits, syncope, fainting, and unresponsive individuals.',
+    iconName: 'Shield',
+    isEmergencyAlert: true,
+    content: {
+      whatIsIt: 'A seizure is a sudden, uncontrolled burst of electrical activity in the brain. Syncope (fainting) is a temporary loss of consciousness usually caused by a transient drop in blood flow to the brain.',
+      commonSymptoms: [
+        'Uncontrollable jerking, stiffening, or shaking of the limbs',
+        'Sudden collapse, vacant stare, or unresponsive to voice and touch',
+        'Temporary cessation of breathing, drooling, or lip biting'
+      ],
+      safeImmediateActions: [
+        'Guide the person gently to the floor away from sharp objects, stairs, or hot liquids.',
+        'Place something soft under their head (like a folded jacket or small pillow).',
+        'Time the duration of the seizure from start to finish.',
+        'Once active jerking stops, roll them onto their side into the Recovery Position to keep their airway open.'
+      ],
+      whatToAvoid: [
+        'NEVER put any objects, keys, spoons, cloth, or your fingers into their mouth.',
+        'Do NOT forcibly hold down or restrain their limbs during a seizure.',
+        'Do NOT offer liquids, food, or onion sniffing until they are fully alert and oriented.'
+      ],
+      warningSigns: [
+        'Seizure lasts longer than 5 minutes (status epilepticus)',
+        'A second seizure follows immediately without the person regaining consciousness',
+        'The seizure occurred in water (swimming pool, bath)'
+      ],
+      whenToConsultDoctor: [
+        'A person with a known seizure disorder who experiences a mild breakthrough fit and recovers completely within 5 minutes, after physician follow-up.'
+      ],
+      whenToSeekEmergency: [
+        'First-ever seizure in a person with no prior history.',
+        'Difficulty breathing or delayed consciousness after jerking ceases.',
+        'The person is pregnant or sustained a severe head injury while falling.'
+      ],
+      references: [
+        { name: 'International League Against Epilepsy (ILAE)', url: 'https://www.ilae.org' },
+        { name: 'Red Cross First Aid Guidelines', url: 'https://www.redcross.org' }
+      ]
+    }
+  },
+  {
+    id: 'injuries-burns-bleeding',
+    categoryNumber: 6,
+    title: 'Injuries, Burns & Severe Bleeding',
+    shortSummary: 'Hemorrhage control, thermal scalds, sprains, and spinal trauma precautions.',
+    iconName: 'Flame',
+    isEmergencyAlert: false,
+    content: {
+      whatIsIt: 'Physical trauma caused by road accidents, falls, workplace lacerations, or heat scalds. Timely wound stabilization minimizes blood loss and prevents permanent tissue damage.',
+      commonSymptoms: [
+        'Pulsatile or continuous heavy bleeding from an open wound',
+        'Localized swelling, deformity, inability to bear weight on a joint',
+        'Blistered, blackened, or red peeling skin following thermal contact'
+      ],
+      safeImmediateActions: [
+        'For bleeding: Apply direct, firm, continuous pressure with a clean cloth or sterile gauze for at least 10 minutes without lifting.',
+        'For burns: Cool the burn under gentle, running cool tap water for 15-20 minutes. Cover loosely with clean, non-stick cling film.',
+        'For suspected fractures: Immobilize the limb in the position found; avoid moving the neck or spine if high-impact trauma occurred.'
+      ],
+      whatToAvoid: [
+        'Do NOT apply ice, toothpastes, butter, turmeric, or oil to burn wounds.',
+        'Do NOT burst intact blisters formed over scalds.',
+        'Do NOT remove deeply impaled foreign objects (knives, glass shards) from wounds; pack gauze around them to stabilize.'
+      ],
+      warningSigns: [
+        'Blood spurting in rhythm with the heartbeat (arterial hemorrhage)',
+        'Cold, clammy skin, rapid weak pulse, and dizziness (signs of hypovolemic shock)',
+        'Numbness, loss of sensation, or pale cold fingers/toes past a fracture site'
+      ],
+      whenToConsultDoctor: [
+        'Deep lacerations that gape open and may require surgical sutures (within 6-8 hours).',
+        'Any puncture wound or bite requiring a Tetanus Toxoid (TT) booster or anti-rabies protocol.',
+        'Sprains unable to bear weight after 24 hours.'
+      ],
+      whenToSeekEmergency: [
+        'Uncontrolled bleeding that soaks through multiple dressings despite continuous pressure.',
+        'Burns covering the face, neck, hands, groin, or large body surface areas.',
+        'Suspected spinal or head injury with neck pain or loss of limb sensation.'
+      ],
+      references: [
+        { name: 'WHO Emergency Trauma Care Protocols', url: 'https://www.who.int' },
+        { name: 'St. John Ambulance First Aid Guide', url: 'https://www.sja.org.uk' }
+      ]
+    }
+  },
+  {
+    id: 'stomach-dehydration',
+    categoryNumber: 7,
+    title: 'Stomach Illness & Dehydration',
+    shortSummary: 'Gastroenteritis, food poisoning, fluid deficit, and acute abdominal pain.',
+    iconName: 'AlertTriangle',
+    isEmergencyAlert: false,
+    content: {
+      whatIsIt: 'Acute gastroenteritis, diarrhea, and vomiting can quickly lead to hypovolemic dehydration and electrolyte imbalances, which are particularly hazardous in young children and older adults.',
+      commonSymptoms: [
+        'Frequent watery stools, abdominal cramping, and bloating',
+        'Nausea, recurrent vomiting, and loss of appetite',
+        'Dry mouth, reduced urination, dark-colored urine, and dizziness when standing'
+      ],
+      safeImmediateActions: [
+        'Administer WHO-standard Oral Rehydration Salts (ORS) in clean water, sipped slowly in small frequent tablespoons.',
+        'Offer bland easy-to-digest foods (rice porridge, banana, curd, boiled potato) once vomiting subsides.',
+        'Rest adequately and monitor frequency of urination.'
+      ],
+      whatToAvoid: [
+        'Do NOT withhold fluids from a vomiting patient; wait 15 minutes after vomiting, then reintroduce ORS in tiny sips.',
+        'Do NOT give antidiarrheal medicines (like loperamide) to children or in cases of high fever or bloody stool without doctor approval.',
+        'Avoid sugary sodas, dairy milk, caffeine, and deep-fried spicy foods.'
+      ],
+      warningSigns: [
+        'Inability to retain any oral fluids for over 12-24 hours',
+        'Sunken eyes, lethargy, absence of tears in crying infants, no urine for >6 hours',
+        'High fever accompanying sudden rigid or tender abdominal swelling'
+      ],
+      whenToConsultDoctor: [
+        'Diarrhea persisting for more than 48-72 hours.',
+        'Signs of moderate dehydration requiring clinical oral or intravenous electrolyte review.'
+      ],
+      whenToSeekEmergency: [
+        'Stools containing significant red blood or resembling dark black tar.',
+        'Vomiting blood or coffee-ground-like material.',
+        'Sudden, severe, localized abdominal pain that is unbearable to touch (suspected appendicitis or bowel perforation).'
+      ],
+      references: [
+        { name: 'WHO Guidelines on Acute Diarrhoea and ORS', url: 'https://www.who.int' },
+        { name: 'Indian Council of Medical Research (ICMR)', url: 'https://main.icmr.nic.in' }
+      ]
+    }
+  },
+  {
+    id: 'other-emergencies',
+    categoryNumber: 8,
+    title: 'Poisoning, Heatstroke & Urgent Crises',
+    shortSummary: 'Toxic ingestion, hypoglycemia, heat hyperpyrexia, and thunderclap cephalalgia.',
+    iconName: 'AlertCircle',
+    isEmergencyAlert: true,
+    content: {
+      whatIsIt: 'Life-threatening medical emergencies including acute chemical/medicinal ingestion, extreme environmental heatstroke, profound diabetic low blood sugar, and acute neurological events.',
+      commonSymptoms: [
+        'Poisoning: Sudden confusion, vomiting, abnormal pupil size, chemical smell, empty bottles',
+        'Heatstroke: Core temperature >40°C (104°F), hot dry or sweaty skin, delirium, confusion',
+        'Hypoglycemia (Diabetic): Trembling, clammy sweat, intense hunger, confusion, slurred speech',
+        'Thunderclap headache: Worst headache of one’s life reaching peak within seconds'
+      ],
+      safeImmediateActions: [
+        'For Suspected Ingestion/Poisoning: Call 112 immediately. Keep the pesticide/medication container for the doctor. If chemical splashed on skin/eyes, flush with tap water for 15 minutes.',
+        'For Heatstroke: Move person to shaded cool space immediately. Spray water and fan vigorously. Place cool damp towels on armpits, neck, and groin.',
+        'For Conscious Diabetic Hypoglycemia: Give 15-20g of fast-acting sugar (half glass fruit juice, 3-4 sugar cubes). Recheck after 15 minutes.'
+      ],
+      whatToAvoid: [
+        'NEVER induce vomiting in poisoning cases; it can burn the esophagus or cause chemical aspiration into the lungs.',
+        'Do NOT give unverified home remedies, milk, or raw eggs to neutralize poison.',
+        'Do NOT administer sweet drinks to an UNCONSCIOUS diabetic patient (choking hazard).'
+      ],
+      warningSigns: [
+        'Unresponsiveness, delirium, or seizures following substance ingestion',
+        'Hot skin accompanied by altered mental status after sun exposure (Heatstroke is fatal without rapid cooling)',
+        'Explosive headache onset with neck stiffness'
+      ],
+      whenToConsultDoctor: [
+        'Mild heat exhaustion where the individual fully cools down and rehydrates within 30 minutes.',
+        'Resolved mild low-sugar episode in a diagnosed diabetic requiring medication review.'
+      ],
+      whenToSeekEmergency: [
+        'ANY suspected ingestion of toxic chemicals, rodenticides, or medication overdoses.',
+        'Unconscious diabetic patient (needs immediate IV dextrose or glucagon).',
+        'High body temperature with altered sensorium during hot Indian summers.'
+      ],
+      references: [
+        { name: 'National Poisons Information Centre (AIIMS New Delhi)', url: 'https://www.aiims.edu' },
+        { name: 'National Centre for Disease Control (NCDC) Heat Guidelines', url: 'https://ncdc.gov.in' }
+      ]
+    }
+  }
+];
+
+/* =========================================================================
+   PULSELAB APPLICATION ROOT COMPONENT
+   ========================================================================= */
+
+export default function App() {
+  const [currentPage, setCurrentPage] = useState<PageView>('home');
+  const [selectedGuideId, setSelectedGuideId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Navigate helper
+  const navigateTo = (page: PageView, guideId?: string) => {
+    setCurrentPage(page);
+    if (guideId) {
+      setSelectedGuideId(guideId);
+    }
+    setIsMobileMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans antialiased selection:bg-teal-500 selection:text-white">
+      {/* 1. TOP EMERGENCY BAR (Always visible for safety) */}
+      <EmergencyTopBanner onEmergencyClick={() => navigateTo('emergency')} />
+
+      {/* 2. MAIN NAVIGATION */}
+      <Header
+        currentPage={currentPage}
+        onNavigate={navigateTo}
+        isMobileMenuOpen={isMobileMenuOpen}
+        setIsMobileMenuOpen={setIsMobileMenuOpen}
+      />
+
+      {/* 3. MAIN ROUTED VIEW */}
+      <main className="flex-1">
+        {currentPage === 'home' && (
+          <HomePage
+            onNavigate={navigateTo}
+            onSelectGuide={(id) => navigateTo('guides', id)}
+          />
+        )}
+        {currentPage === 'guides' && (
+          <HealthGuidesPage
+            initialGuideId={selectedGuideId}
+            onNavigate={navigateTo}
+          />
+        )}
+        {currentPage === 'hospitals' && <HospitalsPage />}
+        {currentPage === 'emergency' && <EmergencyPage onNavigate={navigateTo} />}
+        {currentPage === 'assistant' && (
+          <AssistantPage
+            onNavigate={navigateTo}
+            onSelectGuide={(id) => navigateTo('guides', id)}
+          />
+        )}
+        {currentPage === 'about' && <AboutPage onNavigate={navigateTo} />}
+        {currentPage === 'contact' && <ContactPage />}
+      </main>
+
+      {/* 4. FOOTER & CLINICAL DISCLAIMER */}
+      <Footer onNavigate={navigateTo} />
+    </div>
+  );
+}
+
+/* =========================================================================
+   HEADER & EMERGENCY TOP BANNER
+   ========================================================================= */
+
+function EmergencyTopBanner({ onEmergencyClick }: { onEmergencyClick: () => void }) {
+  return (
+    <div className="bg-red-700 text-white text-xs sm:text-sm px-4 py-2 font-medium flex items-center justify-between shadow-sm sticky top-0 z-50">
+      <div className="max-w-7xl mx-auto w-full flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-red-200 animate-pulse flex-shrink-0" />
+          <span>
+            <strong>National Emergency (India):</strong> Dial <strong>112</strong> for immediate Police, Ambulance, or Fire.
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <a
+            href={`tel:${EMERGENCY_NUMBER}`}
+            className="bg-white text-red-700 hover:bg-red-50 px-2.5 py-1 rounded font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-transform active:scale-95"
+            aria-label="Call emergency 112"
+          >
+            <Phone className="w-3.5 h-3.5 fill-current" /> Call 112
+          </a>
+          <button
+            onClick={onEmergencyClick}
+            className="hidden md:inline-block text-red-100 hover:text-white underline text-xs"
+          >
+            First Aid Protocols
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Header({
+  currentPage,
+  onNavigate,
+  isMobileMenuOpen,
+  setIsMobileMenuOpen
+}: {
+  currentPage: PageView;
+  onNavigate: (page: PageView) => void;
+  isMobileMenuOpen: boolean;
+  setIsMobileMenuOpen: (v: boolean) => void;
+}) {
+  const navItems: { label: string; page: PageView }[] = [
+    { label: 'Home', page: 'home' },
+    { label: 'Health Guides', page: 'guides' },
+    { label: 'Find Hospitals', page: 'hospitals' },
+    { label: 'Health Assistant', page: 'assistant' },
+    { label: 'Emergency Help', page: 'emergency' },
+    { label: 'About', page: 'about' },
+    { label: 'Contact', page: 'contact' },
+  ];
+
+  return (
+    <header className="bg-slate-900 text-white sticky top-9 z-40 border-b border-slate-800 shadow-md">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        {/* LOGO */}
+        <button
+          onClick={() => onNavigate('home')}
+          className="flex items-center gap-2.5 text-left focus:outline-none focus:ring-2 focus:ring-teal-400 rounded-lg p-1"
+          aria-label="PulseLab Home"
+        >
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-teal-500 to-cyan-400 flex items-center justify-center text-white shadow-md shadow-teal-500/20">
+            <HeartPulse className="w-6 h-6 stroke-[2.2]" />
+          </div>
+          <div>
+            <span className="text-xl font-extrabold tracking-tight text-white flex items-center gap-1">
+              Pulse<span className="text-teal-400">Lab</span>
+            </span>
+            <span className="block text-[10px] text-slate-400 uppercase tracking-widest font-semibold leading-none">
+              Smart Health India
+            </span>
+          </div>
+        </button>
+
+        {/* DESKTOP NAV */}
+        <nav className="hidden lg:flex items-center gap-1 text-sm font-medium">
+          {navItems.map((item) => {
+            const isActive = currentPage === item.page;
+            const isEmergency = item.page === 'emergency';
+            return (
+              <button
+                key={item.page}
+                onClick={() => onNavigate(item.page)}
+                className={`px-3.5 py-2 rounded-lg transition-colors ${
+                  isActive
+                    ? 'bg-teal-600/20 text-teal-400 font-semibold'
+                    : isEmergency
+                    ? 'text-red-400 hover:bg-red-950/40'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* ACTIONS */}
+        <div className="hidden sm:flex items-center gap-3">
+          <a
+            href={`tel:${EMERGENCY_NUMBER}`}
+            className="bg-red-600 hover:bg-red-700 text-white font-semibold text-xs px-3.5 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition active:scale-95"
+          >
+            <Phone className="w-3.5 h-3.5" /> Call 112
+          </a>
+        </div>
+
+        {/* MOBILE HAMBURGER BUTTON */}
+        <button
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="lg:hidden p-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-400"
+          aria-label="Toggle navigation menu"
+        >
+          {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+        </button>
+      </div>
+
+      {/* MOBILE NAV DRAWER */}
+      {isMobileMenuOpen && (
+        <div className="lg:hidden border-t border-slate-800 bg-slate-900 px-4 pt-2 pb-6 space-y-1">
+          {navItems.map((item) => (
+            <button
+              key={item.page}
+              onClick={() => onNavigate(item.page)}
+              className={`w-full text-left px-3 py-2.5 rounded-md text-base font-medium flex items-center justify-between ${
+                currentPage === item.page
+                  ? 'bg-teal-500/10 text-teal-400 font-bold'
+                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <span>{item.label}</span>
+              <ChevronRight className="w-4 h-4 opacity-50" />
+            </button>
+          ))}
+          <div className="pt-3 border-t border-slate-800">
+            <a
+              href={`tel:${EMERGENCY_NUMBER}`}
+              className="w-full bg-red-600 text-white font-bold py-2.5 rounded-lg flex items-center justify-center gap-2 shadow"
+            >
+              <Phone className="w-4 h-4" /> Call National Helpline 112
+            </a>
+          </div>
+        </div>
+      )}
+    </header>
+  );
+}
+
+/* =========================================================================
+   HOMEPAGE VIEW
+   ========================================================================= */
+
+function HomePage({
+  onNavigate,
+  onSelectGuide
+}: {
+  onNavigate: (p: PageView) => void;
+  onSelectGuide: (id: string) => void;
+}) {
+  const [quickSearch, setQuickSearch] = useState('');
+
+  const searchResults = useMemo(() => {
+    if (!quickSearch.trim()) return [];
+    const q = quickSearch.toLowerCase();
+    return HEALTH_CATEGORIES.filter((c) =>
+      c.title.toLowerCase().includes(q) ||
+      c.shortSummary.toLowerCase().includes(q) ||
+      c.content.commonSymptoms.some((s) => s.toLowerCase().includes(q)) ||
+      c.content.warningSigns.some((w) => w.toLowerCase().includes(q))
+    );
+  }, [quickSearch]);
+
+  const isEmergencyKeyword = useMemo(() => {
+    const q = quickSearch.toLowerCase();
+    return ['chest pain', 'heart attack', 'stroke', 'unconscious', 'fainting', 'poison', 'choking', 'bleeding'].some((k) => q.includes(k));
+  }, [quickSearch]);
+
+  return (
+    <div className="space-y-16 pb-16">
+      {/* HERO SECTION */}
+      <section className="relative bg-gradient-to-b from-slate-900 via-slate-900 to-slate-800 text-white pt-12 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden">
+        {/* Subtle grid pattern background */}
+        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
+
+        <div className="max-w-5xl mx-auto relative z-10 text-center space-y-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-teal-950/70 border border-teal-500/30 text-teal-300 text-xs sm:text-sm font-semibold tracking-wide">
+            <Shield className="w-4 h-4 text-teal-400" />
+            Verified Health Education & Emergency Navigation for India
+          </div>
+
+          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-tight">
+            Health information and help, <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 via-cyan-300 to-blue-400">
+              when you need it most.
+            </span>
+          </h1>
+
+          <p className="text-base sm:text-lg lg:text-xl text-slate-300 max-w-3xl mx-auto font-normal leading-relaxed">
+            Explore common health concerns, understand critical warning signs, and immediately find real nearby hospitals and emergency services across India.
+          </p>
+
+          {/* INSTANT HEALTH SEARCH BAR */}
+          <div className="max-w-2xl mx-auto relative pt-2">
+            <div className="relative flex items-center shadow-2xl rounded-2xl overflow-hidden bg-white text-slate-900 border border-slate-200 focus-within:ring-4 focus-within:ring-teal-400/40">
+              <Search className="w-6 h-6 text-slate-400 ml-4 flex-shrink-0" />
+              <input
+                type="text"
+                value={quickSearch}
+                onChange={(e) => setQuickSearch(e.target.value)}
+                placeholder="Describe your concern (e.g., fever, chest pain, wheezing, burn)..."
+                className="w-full py-4 px-3 text-sm sm:text-base outline-none bg-transparent placeholder-slate-400"
+                aria-label="Search health guides or symptoms"
+              />
+              {quickSearch && (
+                <button
+                  onClick={() => setQuickSearch('')}
+                  className="px-3 text-slate-400 hover:text-slate-600"
+                  aria-label="Clear search"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+
+            {/* INSTANT SEARCH RESULTS DROPDOWN */}
+            {quickSearch.trim() && (
+              <div className="absolute left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-slate-200 text-left overflow-hidden z-30 max-h-96 overflow-y-auto">
+                {isEmergencyKeyword && (
+                  <div className="bg-red-50 border-b border-red-200 p-3.5 flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-bold text-red-800 uppercase tracking-wider">Potential Medical Emergency</p>
+                      <p className="text-xs text-red-700">If someone is having severe chest pain, stroke signs, or breathing collapse, do not wait.</p>
+                      <a
+                        href={`tel:${EMERGENCY_NUMBER}`}
+                        className="inline-flex items-center gap-1.5 mt-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 px-3 py-1 rounded"
+                      >
+                        <Phone className="w-3 h-3" /> Call 112 Right Now
+                      </a>
+                    </div>
+                  </div>
+                )}
+
+                {searchResults.length > 0 ? (
+                  <div className="divide-y divide-slate-100">
+                    {searchResults.map((g) => (
+                      <button
+                        key={g.id}
+                        onClick={() => onSelectGuide(g.id)}
+                        className="w-full p-3.5 hover:bg-slate-50 flex items-center justify-between text-left transition"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold px-2 py-0.5 rounded bg-teal-50 text-teal-700">
+                              Guide #{g.categoryNumber}
+                            </span>
+                            <span className="font-semibold text-slate-900 text-sm">{g.title}</span>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{g.shortSummary}</p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0 ml-2" />
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-6 text-center text-slate-500 text-sm">
+                    No matching guide found for &ldquo;{quickSearch}&rdquo;. Try describing your symptoms in our interactive assistant.
+                    <button
+                      onClick={() => onNavigate('assistant')}
+                      className="block mx-auto mt-2 text-teal-600 font-semibold underline text-xs"
+                    >
+                      Open PulseLab Health Assistant
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ACTION BUTTONS */}
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-4">
+            <button
+              onClick={() => onNavigate('guides')}
+              className="bg-teal-500 hover:bg-teal-600 text-slate-950 font-bold px-6 py-3 rounded-xl shadow-lg shadow-teal-500/20 text-sm sm:text-base transition active:scale-95 flex items-center gap-2"
+            >
+              <Stethoscope className="w-5 h-5 text-slate-950" /> Explore Health Guides
+            </button>
+            <button
+              onClick={() => onNavigate('hospitals')}
+              className="bg-slate-800 hover:bg-slate-700 text-white font-semibold px-6 py-3 rounded-xl border border-slate-700 text-sm sm:text-base transition active:scale-95 flex items-center gap-2"
+            >
+              <MapPin className="w-5 h-5 text-cyan-400" /> Find Nearby Hospitals
+            </button>
+            <a
+              href={`tel:${EMERGENCY_NUMBER}`}
+              className="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-xl shadow-lg shadow-red-600/30 text-sm sm:text-base transition active:scale-95 flex items-center gap-2"
+            >
+              <Phone className="w-5 h-5" /> Call 112 (India)
+            </a>
+          </div>
+
+          <p className="text-xs text-slate-400 pt-2">
+            112 is India&apos;s unified emergency response number for medical, fire, and police assistance.
+          </p>
+        </div>
+      </section>
+
+      {/* QUICK ASSISTANCE CARDS (4 LARGE ACTIONABLE PORTALS) */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-10 relative z-20">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          {/* Card 1 */}
+          <div
+            onClick={() => onNavigate('assistant')}
+            className="group cursor-pointer bg-white rounded-2xl p-6 border border-slate-200/80 shadow-lg hover:shadow-xl hover:border-teal-400 transition-all transform hover:-translate-y-1"
+          >
+            <div className="w-12 h-12 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center mb-4 group-hover:bg-teal-600 group-hover:text-white transition-colors">
+              <MessageSquare className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 group-hover:text-teal-700">1. Understand a Symptom</h3>
+            <p className="text-slate-600 text-xs mt-2 leading-relaxed">
+              Describe how you feel in simple words. Our triage engine flags warning signs and identifies relevant clinical categories.
+            </p>
+            <span className="inline-flex items-center gap-1 text-teal-600 text-xs font-bold mt-4">
+              Try Assistant <ChevronRight className="w-3.5 h-3.5" />
+            </span>
+          </div>
+
+          {/* Card 2 */}
+          <div
+            onClick={() => onNavigate('guides')}
+            className="group cursor-pointer bg-white rounded-2xl p-6 border border-slate-200/80 shadow-lg hover:shadow-xl hover:border-teal-400 transition-all transform hover:-translate-y-1"
+          >
+            <div className="w-12 h-12 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center mb-4 group-hover:bg-cyan-600 group-hover:text-white transition-colors">
+              <Stethoscope className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 group-hover:text-cyan-700">2. Explore Health Guides</h3>
+            <p className="text-slate-600 text-xs mt-2 leading-relaxed">
+              Eight comprehensive, structured guides covering common infections, trauma, burns, and chronic flare-ups.
+            </p>
+            <span className="inline-flex items-center gap-1 text-cyan-600 text-xs font-bold mt-4">
+              Browse All 8 Guides <ChevronRight className="w-3.5 h-3.5" />
+            </span>
+          </div>
+
+          {/* Card 3 */}
+          <div
+            onClick={() => onNavigate('hospitals')}
+            className="group cursor-pointer bg-white rounded-2xl p-6 border border-slate-200/80 shadow-lg hover:shadow-xl hover:border-teal-400 transition-all transform hover:-translate-y-1"
+          >
+            <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+              <MapPin className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 group-hover:text-blue-700">3. Find Nearby Hospitals</h3>
+            <p className="text-slate-600 text-xs mt-2 leading-relaxed">
+              Detect your device location or enter an Indian PIN code/locality to discover real medical centers and emergency wards.
+            </p>
+            <span className="inline-flex items-center gap-1 text-blue-600 text-xs font-bold mt-4">
+              Locate Facilities <ChevronRight className="w-3.5 h-3.5" />
+            </span>
+          </div>
+
+          {/* Card 4 */}
+          <div
+            onClick={() => onNavigate('emergency')}
+            className="group cursor-pointer bg-red-50/50 rounded-2xl p-6 border border-red-200 shadow-lg hover:shadow-xl hover:border-red-500 transition-all transform hover:-translate-y-1"
+          >
+            <div className="w-12 h-12 rounded-xl bg-red-600 text-white flex items-center justify-center mb-4 shadow-md shadow-red-500/30">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-bold text-red-900">4. Get Emergency Help</h3>
+            <p className="text-red-700 text-xs mt-2 leading-relaxed">
+              Critical FAST stroke test, heart attack emergency protocols, and the 5-point 112 dispatcher communication checklist.
+            </p>
+            <span className="inline-flex items-center gap-1 text-red-700 text-xs font-bold mt-4">
+              Emergency Action <ChevronRight className="w-3.5 h-3.5" />
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* THE 8 MAJOR HEALTH CATEGORIES PREVIEW */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+        <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
+          <div>
+            <span className="text-teal-600 font-bold uppercase tracking-wider text-xs">Clinical Education</span>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900">The 8 Major Health Categories</h2>
+            <p className="text-slate-600 text-sm mt-1">Structured medical summaries to recognize early signs and take safe steps.</p>
+          </div>
+          <button
+            onClick={() => onNavigate('guides')}
+            className="text-teal-700 font-bold text-sm hover:underline flex items-center gap-1"
+          >
+            View detailed guides <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {HEALTH_CATEGORIES.map((cat) => (
+            <div
+              key={cat.id}
+              onClick={() => onSelectGuide(cat.id)}
+              className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition cursor-pointer flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-bold text-slate-500 uppercase">Category {cat.categoryNumber}</span>
+                  {cat.isEmergencyAlert && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded bg-red-100 text-red-800">
+                      <AlertCircle className="w-3 h-3" /> Critical
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-base font-bold text-slate-900 line-clamp-1">{cat.title}</h3>
+                <p className="text-xs text-slate-600 mt-2 line-clamp-3 leading-relaxed">
+                  {cat.shortSummary}
+                </p>
+              </div>
+
+              <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-teal-600">
+                <span>Explore Care Steps</span>
+                <ChevronRight className="w-4 h-4" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* FAST STROKE WARNING BANNER */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-10 border border-slate-800 shadow-xl overflow-hidden relative">
+          <div className="relative z-10 max-w-4xl space-y-6">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded bg-red-600 text-white text-xs font-bold uppercase tracking-wider">
+              <Clock className="w-3.5 h-3.5" /> Time Critical Medical Test
+            </div>
+            <h2 className="text-2xl sm:text-4xl font-black">
+              Spot a Stroke: Memorize <span className="text-red-400">F.A.S.T.</span>
+            </h2>
+            <p className="text-slate-300 text-sm sm:text-base leading-relaxed">
+              When brain blood flow stops, 1.9 million neurons die every minute. If you observe even ONE of these signs in someone, call 112 immediately, even if the symptom improves.
+            </p>
+
+            {/* FAST GRID */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+              <div className="bg-slate-800/80 border border-slate-700 p-4 rounded-xl">
+                <span className="text-3xl font-black text-red-400">F</span>
+                <h4 className="font-bold text-white text-base mt-1">Face Drooping</h4>
+                <p className="text-xs text-slate-300 mt-1">Ask the person to smile. Does one side of their mouth or eye droop downward?</p>
+              </div>
+              <div className="bg-slate-800/80 border border-slate-700 p-4 rounded-xl">
+                <span className="text-3xl font-black text-red-400">A</span>
+                <h4 className="font-bold text-white text-base mt-1">Arm Weakness</h4>
+                <p className="text-xs text-slate-300 mt-1">Ask them to raise both arms. Does one arm drift downward or feel numb and limp?</p>
+              </div>
+              <div className="bg-slate-800/80 border border-slate-700 p-4 rounded-xl">
+                <span className="text-3xl font-black text-red-400">S</span>
+                <h4 className="font-bold text-white text-base mt-1">Speech Slurring</h4>
+                <p className="text-xs text-slate-300 mt-1">Ask them to repeat a simple sentence. Is their speech slurred, strange, or absent?</p>
+              </div>
+              <div className="bg-slate-800/80 border border-red-500/50 bg-red-950/30 p-4 rounded-xl">
+                <span className="text-3xl font-black text-white">T</span>
+                <h4 className="font-bold text-red-300 text-base mt-1">Time to Call 112</h4>
+                <p className="text-xs text-red-200 mt-1">Every second counts. Dial 112 right away. Note down the exact time symptoms started.</p>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <a
+                href={`tel:${EMERGENCY_NUMBER}`}
+                className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-xl shadow-lg shadow-red-600/40 text-sm transition"
+              >
+                <Phone className="w-4 h-4" /> Call 112 Ambulance Now
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* DISPATCH CHECKLIST SECTION */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="bg-teal-900 text-white rounded-3xl p-6 sm:p-10 border border-teal-800 shadow-lg">
+          <div className="max-w-3xl space-y-4">
+            <h3 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
+              <UserCheck className="w-6 h-6 text-teal-300" /> What to tell the 112 Emergency Dispatcher
+            </h3>
+            <p className="text-teal-100 text-xs sm:text-sm leading-relaxed">
+              During an emergency, panic can cause forgotten details. Keep this 5-point checklist in mind when you speak to an operator:
+            </p>
+            <div className="space-y-2.5 pt-2 text-xs sm:text-sm text-teal-50">
+              <div className="flex items-start gap-2.5">
+                <CheckCircle2 className="w-5 h-5 text-teal-300 flex-shrink-0 mt-0.5" />
+                <span><strong>1. Your Exact Location:</strong> Landmark, street name, house number, apartment name, and PIN code.</span>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <CheckCircle2 className="w-5 h-5 text-teal-300 flex-shrink-0 mt-0.5" />
+                <span><strong>2. Nature of the Event:</strong> Heart attack symptoms, road accident, fall, severe burn, or poisoning.</span>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <CheckCircle2 className="w-5 h-5 text-teal-300 flex-shrink-0 mt-0.5" />
+                <span><strong>3. Patient Condition:</strong> Age, biological sex, whether conscious, and whether breathing normally.</span>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <CheckCircle2 className="w-5 h-5 text-teal-300 flex-shrink-0 mt-0.5" />
+                <span><strong>4. Time of Onset:</strong> Exact time symptoms started (critical for stroke medication and cardiac care).</span>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <CheckCircle2 className="w-5 h-5 text-teal-300 flex-shrink-0 mt-0.5" />
+                <span><strong>5. Stay on the Line:</strong> Never hang up first. Let the dispatcher instruct you on next steps.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/* =========================================================================
+   INDIVIDUAL HEALTH GUIDES PAGE (FULL 8-POINT CLINICAL FRAMEWORK)
+   ========================================================================= */
+
+function HealthGuidesPage({
+  initialGuideId,
+  onNavigate
+}: {
+  initialGuideId: string | null;
+  onNavigate: (p: PageView) => void;
+}) {
+  const [selectedId, setSelectedId] = useState<string>(initialGuideId || HEALTH_CATEGORIES[0].id);
+
+  // Sync if prop changes
+  useEffect(() => {
+    if (initialGuideId) {
+      setSelectedId(initialGuideId);
+    }
+  }, [initialGuideId]);
+
+  const currentGuide = useMemo(() => {
+    return HEALTH_CATEGORIES.find((c) => c.id === selectedId) || HEALTH_CATEGORIES[0];
+  }, [selectedId]);
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
+      {/* HEADER */}
+      <div className="border-b border-slate-200 pb-6">
+        <span className="text-teal-600 font-bold uppercase tracking-wider text-xs">Knowledge Base</span>
+        <h1 className="text-3xl font-extrabold text-slate-900 mt-1">Comprehensive Health Guides</h1>
+        <p className="text-slate-600 text-sm mt-1 max-w-3xl">
+          Each topic follows a strict 8-point standardized medical framework: understanding the condition, safe immediate measures, what never to do, red flags, and emergency care thresholds.
+        </p>
+      </div>
+
+      {/* TWO-COLUMN LAYOUT: CATEGORY SELECTOR + 8-POINT GUIDE VIEWER */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* LEFT NAV LIST */}
+        <aside className="lg:col-span-4 space-y-2">
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-3 mb-2">
+            The 8 Categories
+          </h3>
+          <div className="space-y-1">
+            {HEALTH_CATEGORIES.map((cat) => {
+              const isSelected = cat.id === currentGuide.id;
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedId(cat.id)}
+                  className={`w-full text-left p-3.5 rounded-xl transition flex items-center justify-between ${
+                    isSelected
+                      ? 'bg-teal-50 border border-teal-300 text-teal-900 shadow-sm'
+                      : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`w-7 h-7 rounded-lg text-xs font-bold flex items-center justify-center flex-shrink-0 ${
+                        isSelected ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {cat.categoryNumber}
+                    </span>
+                    <div>
+                      <span className="font-semibold text-sm block leading-snug">{cat.title}</span>
+                      {cat.isEmergencyAlert && (
+                        <span className="text-[10px] text-red-600 font-bold uppercase">Emergency Guideline</span>
+                      )}
+                    </div>
+                  </div>
+                  <ChevronRight className={`w-4 h-4 ${isSelected ? 'text-teal-600' : 'text-slate-400'}`} />
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="p-4 mt-6 bg-slate-900 text-white rounded-2xl space-y-3">
+            <h4 className="font-bold text-sm flex items-center gap-1.5 text-red-400">
+              <AlertTriangle className="w-4 h-4" /> Need Immediate Care?
+            </h4>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              If the patient cannot breathe, has chest tightness, or is unresponsive, call for an ambulance right away.
+            </p>
+            <a
+              href={`tel:${EMERGENCY_NUMBER}`}
+              className="w-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-2 transition"
+            >
+              <Phone className="w-3.5 h-3.5" /> Call 112 (India)
+            </a>
+          </div>
+        </aside>
+
+        {/* RIGHT CONTENT: DETAILED 8-SECTION CARD */}
+        <div className="lg:col-span-8 bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm space-y-8">
+          {/* Header block */}
+          <div className="border-b border-slate-100 pb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-teal-100 text-teal-800">
+                  Category #{currentGuide.categoryNumber}
+                </span>
+                {currentGuide.isEmergencyAlert && (
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-800 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" /> Urgent Protocol
+                  </span>
+                )}
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 mt-2">{currentGuide.title}</h2>
+            </div>
+            <button
+              onClick={() => onNavigate('hospitals')}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition flex-shrink-0"
+            >
+              <MapPin className="w-3.5 h-3.5 text-teal-600" /> Find Nearest Center
+            </button>
+          </div>
+
+          {/* Section 1: What is this health problem? */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-teal-700 flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-teal-50 text-teal-700 text-xs flex items-center justify-center border border-teal-200 font-extrabold">1</span>
+              What is this health problem?
+            </h3>
+            <p className="text-slate-700 text-sm leading-relaxed pl-7">{currentGuide.content.whatIsIt}</p>
+          </div>
+
+          {/* Section 2: Common Symptoms */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-teal-700 flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-teal-50 text-teal-700 text-xs flex items-center justify-center border border-teal-200 font-extrabold">2</span>
+              Common Symptoms
+            </h3>
+            <ul className="space-y-1.5 pl-7 text-sm text-slate-700">
+              {currentGuide.content.commonSymptoms.map((s, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <span className="text-teal-500 font-bold">•</span>
+                  <span>{s}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Section 3: Safe Immediate Actions */}
+          <div className="space-y-2 bg-emerald-50/60 border border-emerald-200/80 p-4 rounded-2xl">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-xs flex items-center justify-center font-extrabold">3</span>
+              What Can Someone Safely Do Immediately?
+            </h3>
+            <ul className="space-y-2 pl-7 text-sm text-emerald-950 pt-1">
+              {currentGuide.content.safeImmediateActions.map((a, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                  <span>{a}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Section 4: What Should They Avoid? */}
+          <div className="space-y-2 bg-amber-50/60 border border-amber-200/80 p-4 rounded-2xl">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-amber-900 flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-amber-600 text-white text-xs flex items-center justify-center font-extrabold">4</span>
+              What Should They Avoid? (Crucial Safety Don&apos;ts)
+            </h3>
+            <ul className="space-y-2 pl-7 text-sm text-amber-950 pt-1">
+              {currentGuide.content.whatToAvoid.map((avoid, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <XCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <span>{avoid}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Section 5: Warning Signs (Red Flags) */}
+          <div className="space-y-2 bg-red-50/70 border border-red-200 p-4 rounded-2xl">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-red-900 flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-red-600 text-white text-xs flex items-center justify-center font-extrabold">5</span>
+              Warning Signs (Do Not Ignore)
+            </h3>
+            <ul className="space-y-2 pl-7 text-sm text-red-950 pt-1">
+              {currentGuide.content.warningSigns.map((w, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                  <span className="font-medium">{w}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Section 6: When to Consult a Doctor */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-700 text-xs flex items-center justify-center border border-slate-300 font-extrabold">6</span>
+              When to Consult a Qualified Doctor
+            </h3>
+            <ul className="space-y-1.5 pl-7 text-sm text-slate-700">
+              {currentGuide.content.whenToConsultDoctor.map((d, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <span className="text-teal-600 font-bold">→</span>
+                  <span>{d}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Section 7: When to Seek Emergency Care */}
+          <div className="space-y-2 border-l-4 border-red-600 pl-4 py-2 bg-slate-50 rounded-r-xl">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-red-700 flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-red-600 text-white text-xs flex items-center justify-center font-extrabold">7</span>
+              When to Seek Emergency Care (Call 112)
+            </h3>
+            <ul className="space-y-1.5 text-sm text-slate-800 pt-1">
+              {currentGuide.content.whenToSeekEmergency.map((em, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                  <span className="font-semibold text-red-900">{em}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Section 8: Find Nearby Medical Assistance & Citations */}
+          <div className="pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                8. Medical Authorities & References
+              </h4>
+              <div className="flex flex-wrap gap-3 mt-1.5">
+                {currentGuide.content.references.map((r, idx) => (
+                  <a
+                    key={idx}
+                    href={r.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-teal-600 hover:text-teal-800 underline font-medium"
+                  >
+                    {r.name} <ExternalLink className="w-3 h-3" />
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={() => onNavigate('hospitals')}
+              className="bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition flex items-center gap-1.5 active:scale-95"
+            >
+              <Navigation className="w-3.5 h-3.5" /> Locate Nearest Hospitals Now
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   FIND NEARBY HOSPITALS & CLINICS (LIVE GEOLOCATION + OVERPASS / MAPS)
+   ========================================================================= */
+
+// Known verified reference facilities across major Indian metro zones used for instantaneous zero-latency offline demo / fallback
+const KNOWN_INDIAN_FACILITIES: Facility[] = [
+  {
+    id: 'aiims-delhi',
+    name: 'All India Institute of Medical Sciences (AIIMS)',
+    type: 'emergency',
+    address: 'Sri Aurobindo Marg, Ansari Nagar, New Delhi, Delhi 110029',
+    lat: 28.5672,
+    lon: 77.2100,
+    phone: '011-26588500',
+    isOpen24x7: true
+  },
+  {
+    id: 'safdarjung-delhi',
+    name: 'Vardhman Mahavir Medical College & Safdarjung Hospital',
+    type: 'hospital',
+    address: 'Ring Road, Opposite AIIMS, New Delhi, Delhi 110029',
+    lat: 28.5700,
+    lon: 77.2075,
+    phone: '011-26707444',
+    isOpen24x7: true
+  },
+  {
+    id: 'kem-mumbai',
+    name: 'King Edward Memorial (KEM) Hospital',
+    type: 'emergency',
+    address: 'Acharya Donde Marg, Parel, Mumbai, Maharashtra 400012',
+    lat: 19.0026,
+    lon: 72.8427,
+    phone: '022-24107000',
+    isOpen24x7: true
+  },
+  {
+    id: 'nimhans-bengaluru',
+    name: 'NIMHANS Neuro-Emergency Center',
+    type: 'emergency',
+    address: 'Hosur Road, Bengaluru, Karnataka 560029',
+    lat: 12.9392,
+    lon: 77.5960,
+    phone: '080-26995000',
+    isOpen24x7: true
+  },
+  {
+    id: 'apollo-chennai',
+    name: 'Apollo Hospital Greams Road',
+    type: 'hospital',
+    address: '21 Greams Lane, Thousand Lights, Chennai, Tamil Nadu 600006',
+    lat: 13.0569,
+    lon: 80.2520,
+    phone: '044-28290200',
+    isOpen24x7: true
+  },
+  {
+    id: 'nims-hyderabad',
+    name: 'Nizam’s Institute of Medical Sciences (NIMS)',
+    type: 'hospital',
+    address: 'Punjagutta Road, Hyderabad, Telangana 500082',
+    lat: 17.4243,
+    lon: 78.4526,
+    phone: '040-23489000',
+    isOpen24x7: true
+  }
+];
+
+// Great-circle Haversine formula (km)
+function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 10) / 10;
+}
+
+function HospitalsPage() {
+  const [filterType, setFilterType] = useState<string>('all');
+  const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [isLoadingLocation, setIsLoadingLocation] = useState(false);
+  const [manualQuery, setManualQuery] = useState('');
+  const [facilities, setFacilities] = useState<Facility[]>([]);
+  const [isFetchingOverpass, setIsFetchingOverpass] = useState(false);
+  const [liveDataSource, setLiveDataSource] = useState<'osm_live' | 'curated' | null>(null);
+
+  // Request browser geolocation
+  const handleDetectLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setIsLoadingLocation(true);
+    setLocationError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        setUserCoords({ lat, lon });
+        setIsLoadingLocation(false);
+        // Query live OpenStreetMap Overpass API for real amenities near coordinates
+        fetchLiveNearbyFacilities(lat, lon);
+      },
+      (err) => {
+        setIsLoadingLocation(false);
+        if (err.code === err.PERMISSION_DENIED) {
+          setLocationError('Location permission was denied. You can search manually by Indian PIN code or City below.');
+        } else {
+          setLocationError('Unable to detect location. Please type your city or locality manually.');
+        }
+      },
+      { timeout: 12000, enableHighAccuracy: true }
+    );
+  };
+
+  // Query live Overpass API (Real OpenStreetMap nodes in India)
+  const fetchLiveNearbyFacilities = async (lat: number, lon: number) => {
+    setIsFetchingOverpass(true);
+    setLiveDataSource(null);
+
+    // Bounding radius 8km
+    const query = `
+      [out:json][timeout:15];
+      (
+        node["amenity"="hospital"](around:8000,${lat},${lon});
+        node["amenity"="clinic"](around:8000,${lat},${lon});
+        node["amenity"="pharmacy"](around:8000,${lat},${lon});
+      );
+      out body 15;
+    `;
+
+    try {
+      const resp = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `data=${encodeURIComponent(query)}`
+      });
+
+      if (!resp.ok) throw new Error('Overpass network error');
+      const data = await resp.json();
+
+      if (data && data.elements && data.elements.length > 0) {
+        const mapped: Facility[] = data.elements
+          .filter((el: any) => el.tags && (el.tags.name || el.tags['name:en']))
+          .map((el: any) => {
+            const name = el.tags.name || el.tags['name:en'] || 'Local Medical Center';
+            const amenity = el.tags.amenity;
+            let type: Facility['type'] = 'hospital';
+            if (amenity === 'clinic') type = 'clinic';
+            if (amenity === 'pharmacy') type = 'pharmacy';
+            if (el.tags.emergency === 'yes') type = 'emergency';
+
+            const d = calculateDistanceKm(lat, lon, el.lat, el.lon);
+
+            return {
+              id: `osm-${el.id}`,
+              name,
+              type,
+              address: el.tags['addr:street'] || el.tags['addr:city'] || 'Location coordinates recorded',
+              lat: el.lat,
+              lon: el.lon,
+              distanceKm: d,
+              phone: el.tags['phone'] || el.tags['contact:phone'] || undefined,
+              isOpen24x7: el.tags['opening_hours'] === '24/7'
+            };
+          });
+
+        mapped.sort((a, b) => (a.distanceKm || 0) - (b.distanceKm || 0));
+        setFacilities(mapped);
+        setLiveDataSource('osm_live');
+      } else {
+        // Fallback to calculated distance from known centers if sparse OSM nodes
+        fallbackToCalculated(lat, lon);
+      }
+    } catch {
+      // Graceful fallback to verified benchmark centers
+      fallbackToCalculated(lat, lon);
+    } finally {
+      setIsFetchingOverpass(false);
+    }
+  };
+
+  const fallbackToCalculated = (lat: number, lon: number) => {
+    const withDistance = KNOWN_INDIAN_FACILITIES.map((f) => ({
+      ...f,
+      distanceKm: calculateDistanceKm(lat, lon, f.lat, f.lon)
+    })).sort((a, b) => a.distanceKm - b.distanceKm);
+
+    setFacilities(withDistance);
+    setLiveDataSource('curated');
+  };
+
+  // Initial load
+  useEffect(() => {
+    // Default fallback initial list without fabricated distance
+    setFacilities(KNOWN_INDIAN_FACILITIES);
+  }, []);
+
+  // Filter facilities
+  const filteredFacilities = useMemo(() => {
+    return facilities.filter((f) => {
+      if (filterType === 'all') return true;
+      if (filterType === 'emergency') return f.type === 'emergency' || f.type === 'hospital';
+      return f.type === filterType;
+    });
+  }, [facilities, filterType]);
+
+  // Construct Google Maps Direct Search link
+  const getGoogleMapsDeepLink = (facility: Facility) => {
+    const q = encodeURIComponent(`${facility.name}, ${facility.address}`);
+    return `https://www.google.com/maps/search/?api=1&query=${q}`;
+  };
+
+  const getManualSearchMapsLink = () => {
+    const q = encodeURIComponent(`hospitals near ${manualQuery}`);
+    return `https://www.google.com/maps/search/?api=1&query=${q}`;
+  };
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
+      {/* SECTION HEADER */}
+      <div className="border-b border-slate-200 pb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <span className="text-teal-600 font-bold uppercase tracking-wider text-xs">Medical Directory</span>
+          <h1 className="text-3xl font-extrabold text-slate-900 mt-1">Find Nearby Hospitals & Emergency Care</h1>
+          <p className="text-slate-600 text-sm mt-1 max-w-2xl">
+            Locate verified government and private hospitals, trauma centers, and pharmacies across India. All facility links connect directly to live satellite navigation and verified phone dialers.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setFilterType('emergency');
+              handleDetectLocation();
+            }}
+            className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition active:scale-95"
+          >
+            <AlertTriangle className="w-4 h-4" /> Find Emergency Care Near Me
+          </button>
+        </div>
+      </div>
+
+      {/* LOCATION PERMISSION & CONTROLS BOX */}
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-teal-600" />
+              Location Access
+            </h3>
+            <p className="text-xs text-slate-600">
+              PulseLab uses your device coordinates solely to compute distances to health facilities. Your location is never stored on any server.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={handleDetectLocation}
+              disabled={isLoadingLocation}
+              className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs sm:text-sm px-4 py-2.5 rounded-xl flex items-center gap-2 transition shadow-sm disabled:opacity-50"
+            >
+              {isLoadingLocation ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" /> Detecting Location...
+                </>
+              ) : (
+                <>
+                  <Navigation className="w-4 h-4" /> Detect My Location
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Location alert or error */}
+        {locationError && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-900 p-3.5 rounded-xl text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+            <span>{locationError}</span>
+          </div>
+        )}
+
+        {/* MANUAL FALLBACK SEARCH */}
+        <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row gap-3 items-center">
+          <div className="relative flex-1 w-full">
+            <input
+              type="text"
+              value={manualQuery}
+              onChange={(e) => setManualQuery(e.target.value)}
+              placeholder="Or enter city, locality, or 6-digit Indian PIN code (e.g. 110029, Hyderabad, Andheri)..."
+              className="w-full text-xs sm:text-sm border border-slate-300 rounded-xl px-3.5 py-2.5 outline-none focus:ring-2 focus:ring-teal-400"
+            />
+          </div>
+          {manualQuery.trim() && (
+            <a
+              href={getManualSearchMapsLink()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition flex-shrink-0"
+            >
+              <ExternalLink className="w-3.5 h-3.5 text-cyan-400" /> Search &ldquo;{manualQuery}&rdquo; on Google Maps
+            </a>
+          )}
+        </div>
+
+        {/* DATA SOURCE INDICATOR */}
+        {liveDataSource && (
+          <div className="text-[11px] text-slate-500 flex items-center gap-1.5 pt-1">
+            <Info className="w-3.5 h-3.5 text-teal-600" />
+            {liveDataSource === 'osm_live'
+              ? 'Showing live OpenStreetMap hospital nodes detected within 8 km.'
+              : 'Showing reference major national referral centers with calculated distances.'}
+          </div>
+        )}
+      </div>
+
+      {/* FILTER BUTTONS */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-bold text-slate-400 mr-2">Filter By:</span>
+        {[
+          { label: 'All Facilities', value: 'all' },
+          { label: 'Emergency & Hospitals', value: 'emergency' },
+          { label: 'Clinics', value: 'clinic' },
+          { label: 'Pharmacies', value: 'pharmacy' },
+        ].map((f) => (
+          <button
+            key={f.value}
+            onClick={() => setFilterType(f.value)}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+              filterType === f.value
+                ? 'bg-slate-900 text-white shadow-sm'
+                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* FACILITIES LISTING */}
+      {isFetchingOverpass ? (
+        <div className="text-center py-16 bg-white rounded-3xl border border-slate-200">
+          <RefreshCw className="w-8 h-8 text-teal-600 animate-spin mx-auto" />
+          <p className="text-sm font-semibold text-slate-700 mt-3">Scanning real hospital registries near your coordinates...</p>
+        </div>
+      ) : filteredFacilities.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredFacilities.map((facility) => {
+            const mapsUrl = getGoogleMapsDeepLink(facility);
+            return (
+              <div
+                key={facility.id}
+                className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between"
+              >
+                <div>
+                  {/* Category Pill & Distance */}
+                  <div className="flex items-center justify-between mb-2">
+                    <span
+                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                        facility.type === 'emergency'
+                          ? 'bg-red-100 text-red-800'
+                          : facility.type === 'clinic'
+                          ? 'bg-purple-100 text-purple-800'
+                          : facility.type === 'pharmacy'
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-teal-100 text-teal-800'
+                      }`}
+                    >
+                      {facility.type}
+                    </span>
+                    {facility.distanceKm !== undefined && (
+                      <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        <Navigation className="w-3 h-3 text-teal-600" /> {facility.distanceKm} km away
+                      </span>
+                    )}
+                  </div>
+
+                  <h3 className="text-base font-bold text-slate-900 leading-snug line-clamp-2">
+                    {facility.name}
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1 line-clamp-2">{facility.address}</p>
+
+                  {facility.isOpen24x7 && (
+                    <div className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+                      <Clock className="w-3 h-3" /> Open 24/7 (Emergency)
+                    </div>
+                  )}
+                </div>
+
+                {/* ACTION BUTTONS */}
+                <div className="pt-4 mt-4 border-t border-slate-100 flex items-center gap-2">
+                  {facility.phone ? (
+                    <a
+                      href={`tel:${facility.phone.replace(/[^0-9]/g, '')}`}
+                      className="flex-1 bg-teal-50 hover:bg-teal-100 text-teal-800 font-bold text-xs py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition"
+                    >
+                      <Phone className="w-3.5 h-3.5 text-teal-600" /> Call
+                    </a>
+                  ) : (
+                    <span className="flex-1 text-center text-[11px] text-slate-400 py-2">
+                      Phone on Map
+                    </span>
+                  )}
+
+                  <a
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-teal-400" /> Directions
+                  </a>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="bg-white rounded-3xl border border-slate-200 p-10 text-center space-y-3">
+          <MapPin className="w-10 h-10 text-slate-300 mx-auto" />
+          <h3 className="text-base font-bold text-slate-800">No medical facilities found for this filter</h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            Try switching to &ldquo;All Facilities&rdquo; or tap below to search live Google Maps for facilities in your locality.
+          </p>
+          <a
+            href={getManualSearchMapsLink()}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 bg-teal-600 text-white text-xs font-bold px-4 py-2 rounded-xl"
+          >
+            <ExternalLink className="w-4 h-4" /> Open Google Maps Live Directory
+          </a>
+        </div>
+      )}
+
+      {/* TECHNICAL BACKEND CONFIGURATION NOTE */}
+      <div className="bg-slate-100 border border-slate-200 rounded-2xl p-4 text-xs text-slate-600 space-y-1">
+        <p className="font-bold text-slate-800 flex items-center gap-1.5">
+          <Shield className="w-4 h-4 text-teal-600" /> Production API Integration Notice
+        </p>
+        <p>
+          PulseLab uses OpenStreetMap Overpass and Google Maps deep links. In production, configure your secure server-side proxy with the <code>GOOGLE_MAPS_PLACES_API_KEY</code> environment variable to stream live verified bed availability and real-time hospital triage capacity without exposing credentials in client-side code.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   PULSELAB HEALTH ASSISTANT (CONVERSATIONAL SYMPTOM TRIAGE)
+   ========================================================================= */
+
+interface Message {
+  id: string;
+  sender: 'bot' | 'user';
+  text: string;
+  isEmergencyAlert?: boolean;
+  suggestedGuideId?: string;
+  quickReplies?: string[];
+}
+
+function AssistantPage({
+  onNavigate,
+  onSelectGuide
+}: {
+  onNavigate: (p: PageView) => void;
+  onSelectGuide: (id: string) => void;
+}) {
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: 'welcome-1',
+      sender: 'bot',
+      text: 'Namaste! I am the PulseLab Health Assistant. Describe your symptoms in everyday language (e.g. "I have had a high fever and headache since yesterday" or "My chest feels tight").',
+      quickReplies: ['Fever & Sore throat', 'Chest tightness', 'Sudden dizziness', 'Diarrhea & Vomiting']
+    }
+  ]);
+  const [inputValue, setInputValue] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const handleSend = (textToSend?: string) => {
+    const text = (textToSend || inputValue).trim();
+    if (!text) return;
+
+    const userMsg: Message = {
+      id: `user-${Date.now()}`,
+      sender: 'user',
+      text
+    };
+
+    setMessages((prev) => [...prev, userMsg]);
+    if (!textToSend) setInputValue('');
+
+    // Process Clinical Decision Rules
+    setTimeout(() => {
+      processTriageResponse(text.toLowerCase());
+    }, 450);
+  };
+
+  const processTriageResponse = (q: string) => {
+    // 1. Critical Emergency Rules (Immediate priority)
+    const isCardiac = q.includes('chest') || q.includes('heart') || q.includes('arm pain') || q.includes('crushing');
+    const isStroke = q.includes('stroke') || q.includes('face drop') || q.includes('speech') || q.includes('slurring') || q.includes('paralysis');
+    const isPoisoning = q.includes('poison') || q.includes('overdose') || q.includes('chemical') || q.includes('rat poison');
+    const isSevereBreathing = q.includes('cannot breathe') || q.includes('choking') || q.includes('blue lips') || q.includes('severe asthma');
+
+    if (isCardiac) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `bot-${Date.now()}`,
+          sender: 'bot',
+          isEmergencyAlert: true,
+          text: 'CRITICAL ALERT: Chest discomfort, pressure, or radiating pain can indicate an acute heart attack. Do NOT wait for symptoms to improve.',
+          suggestedGuideId: 'chest-pain-heart',
+          quickReplies: ['Call 112 Right Now', 'What to do while waiting']
+        }
+      ]);
+      return;
+    }
+
+    if (isStroke) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `bot-${Date.now()}`,
+          sender: 'bot',
+          isEmergencyAlert: true,
+          text: 'EMERGENCY: Sudden facial drooping, arm numbness, or speech slurring are clinical signs of Acute Stroke (F.A.S.T.). Rapid intervention within minutes is essential.',
+          suggestedGuideId: 'stroke-fast',
+          quickReplies: ['Call 112 Immediately', 'View FAST Guide']
+        }
+      ]);
+      return;
+    }
+
+    if (isPoisoning) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `bot-${Date.now()}`,
+          sender: 'bot',
+          isEmergencyAlert: true,
+          text: 'URGENT: For suspected poisoning or chemical ingestion, never induce vomiting. Call 112 and keep the product container for medical personnel.',
+          suggestedGuideId: 'other-emergencies'
+        }
+      ]);
+      return;
+    }
+
+    if (isSevereBreathing) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `bot-${Date.now()}`,
+          sender: 'bot',
+          isEmergencyAlert: true,
+          text: 'URGENT: Severe breathing distress requires immediate emergency treatment. Sit upright and avoid lying down.',
+          suggestedGuideId: 'breathing-allergies'
+        }
+      ]);
+      return;
+    }
+
+    // 2. Secondary Health Categories
+    if (q.includes('fever') || q.includes('temperature') || q.includes('cold') || q.includes('cough') || q.includes('throat')) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `bot-${Date.now()}`,
+          sender: 'bot',
+          text: 'This appears related to Fever & Common Respiratory Infections. For most mild viral infections, rest, hydration (ORS/fluids), and fever monitoring are safe primary steps. Watch for red flags like fever lasting >3 days, severe breathlessness, or rashes.',
+          suggestedGuideId: 'fever-infections',
+          quickReplies: ['When to see a doctor?', 'Find nearby clinics']
+        }
+      ]);
+      return;
+    }
+
+    if (q.includes('stomach') || q.includes('vomit') || q.includes('diarrhea') || q.includes('loose motion') || q.includes('cramp')) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `bot-${Date.now()}`,
+          sender: 'bot',
+          text: 'This is consistent with Stomach Illness & Dehydration. Sip WHO-standard Oral Rehydration Salts (ORS) slowly in small quantities. Seek clinical evaluation if unable to keep liquids down, experiencing black stools, or severe localized abdominal pain.',
+          suggestedGuideId: 'stomach-dehydration',
+          quickReplies: ['ORS instructions', 'Warning signs']
+        }
+      ]);
+      return;
+    }
+
+    if (q.includes('burn') || q.includes('cut') || q.includes('wound') || q.includes('bleeding') || q.includes('injury') || q.includes('sprain')) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `bot-${Date.now()}`,
+          sender: 'bot',
+          text: 'For burns: cool under running water for 15 minutes (no toothpaste or ice). For wounds: apply continuous direct pressure with a clean cloth. If bleeding does not stop after 10 minutes, seek emergency trauma care.',
+          suggestedGuideId: 'injuries-burns-bleeding'
+        }
+      ]);
+      return;
+    }
+
+    // Default general response
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `bot-${Date.now()}`,
+        sender: 'bot',
+        text: 'Thank you for sharing your concerns. PulseLab does not provide clinical diagnoses or individualized prescriptions. Please select one of our 8 comprehensive guides or locate a nearby qualified clinic for an in-person assessment.',
+        quickReplies: ['View all 8 Guides', 'Find nearest clinic']
+      }
+    ]);
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-6">
+      {/* HEADER */}
+      <div className="border-b border-slate-200 pb-4">
+        <span className="text-teal-600 font-bold uppercase tracking-wider text-xs">Conversational Triage</span>
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">
+          PulseLab Health Assistant
+        </h1>
+        <p className="text-xs sm:text-sm text-slate-600 mt-1">
+          Enter plain-language symptoms. The assistant detects danger indicators and matches your situation to appropriate care pathways.
+        </p>
+      </div>
+
+      {/* CHAT CONTAINER */}
+      <div className="bg-white border border-slate-200 rounded-3xl shadow-sm flex flex-col h-[540px] overflow-hidden">
+        {/* Messages Feed */}
+        <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 bg-slate-50/50">
+          {messages.map((m) => {
+            const isBot = m.sender === 'bot';
+            return (
+              <div
+                key={m.id}
+                className={`flex flex-col ${isBot ? 'items-start' : 'items-end'}`}
+              >
+                <div
+                  className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+                    isBot
+                      ? m.isEmergencyAlert
+                        ? 'bg-red-50 border border-red-200 text-red-950 font-medium'
+                        : 'bg-white border border-slate-200 text-slate-800'
+                      : 'bg-teal-600 text-white font-medium'
+                  }`}
+                >
+                  {m.isEmergencyAlert && (
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-red-700 uppercase tracking-wide mb-1">
+                      <AlertTriangle className="w-4 h-4 text-red-600" /> Urgent Care Alert
+                    </div>
+                  )}
+
+                  <p>{m.text}</p>
+
+                  {/* Red Alert Call Button in chat */}
+                  {m.isEmergencyAlert && (
+                    <div className="mt-3 pt-2 border-t border-red-200 flex flex-wrap gap-2">
+                      <a
+                        href={`tel:${EMERGENCY_NUMBER}`}
+                        className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5"
+                      >
+                        <Phone className="w-3.5 h-3.5" /> Call 112 Right Now
+                      </a>
+                    </div>
+                  )}
+
+                  {/* Suggestion button */}
+                  {m.suggestedGuideId && (
+                    <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
+                      <button
+                        onClick={() => onSelectGuide(m.suggestedGuideId!)}
+                        className="text-xs font-bold text-teal-700 hover:underline flex items-center gap-1"
+                      >
+                        Open Relevant Health Guide <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Quick replies */}
+                {m.quickReplies && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {m.quickReplies.map((qr, i) => (
+                      <button
+                        key={i}
+                        onClick={() => {
+                          if (qr === 'Call 112 Right Now' || qr === 'Call 112 Immediately') {
+                            window.location.href = `tel:${EMERGENCY_NUMBER}`;
+                          } else if (qr === 'Find nearby clinics' || qr === 'Find nearest clinic') {
+                            onNavigate('hospitals');
+                          } else if (qr === 'View all 8 Guides') {
+                            onNavigate('guides');
+                          } else {
+                            handleSend(qr);
+                          }
+                        }}
+                        className="bg-white border border-teal-200 text-teal-800 hover:bg-teal-50 text-xs px-2.5 py-1 rounded-full shadow-2xs transition"
+                      >
+                        {qr}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* INPUT BOX */}
+        <div className="p-3 bg-white border-t border-slate-200 flex items-center gap-2">
+          <input
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSend();
+            }}
+            placeholder="Type your health concern or symptoms here..."
+            className="flex-1 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-teal-400 bg-slate-50"
+            aria-label="Enter your symptom"
+          />
+          <button
+            onClick={() => handleSend()}
+            disabled={!inputValue.trim()}
+            className="bg-teal-600 hover:bg-teal-700 text-white p-2.5 rounded-xl disabled:opacity-40 transition"
+            aria-label="Send message"
+          >
+            <Send className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="text-center text-xs text-slate-500 max-w-xl mx-auto leading-relaxed">
+        <strong>Safety Note:</strong> PulseLab Health Assistant does not prescribe medicine or provide conclusive diagnoses. If you experience severe pain, difficulty breathing, or sudden weakness, call 112 without delay.
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   EMERGENCY HELP PAGE (NATIONAL DISPATCH & IMMEDIATE LIFE-SAVING PROTOCOLS)
+   ========================================================================= */
+
+function EmergencyPage({ onNavigate }: { onNavigate: (p: PageView) => void }) {
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-12">
+      {/* HERO ALERT */}
+      <div className="bg-gradient-to-r from-red-700 via-red-600 to-rose-700 text-white rounded-3xl p-6 sm:p-10 shadow-2xl space-y-6">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="space-y-2 max-w-2xl">
+            <span className="bg-white/20 text-white font-bold text-xs uppercase px-3 py-1 rounded-full inline-block">
+              India Unified Emergency Service
+            </span>
+            <h1 className="text-3xl sm:text-5xl font-black tracking-tight">
+              Emergency Medical Helpline: 112
+            </h1>
+    
